@@ -1,0 +1,65 @@
+{
+  "manifest_version": 3,
+  "name": "네이버 증권 리포트",
+  "short_name": "네이버 리포트",
+  "description": "네이버 증권 리서치 PDF를 개별 다운로드하고, 날짜별 리포트를 카테고리 ZIP으로 미리보기 후 저장합니다.",
+  "version": "0.1.0",
+  "permissions": [
+    "downloads",
+    "offscreen",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://finance.naver.com/*",
+    "https://stock.pstatic.net/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "네이버 증권 리포트",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://finance.naver.com/research",
+        "https://finance.naver.com/research/",
+        "https://finance.naver.com/research/index.naver*",
+        "https://finance.naver.com/research/company_list.naver*",
+        "https://finance.naver.com/research/company_read.naver*",
+        "https://finance.naver.com/research/market_info_list.naver*",
+        "https://finance.naver.com/research/market_info_read.naver*",
+        "https://finance.naver.com/research/invest_list.naver*",
+        "https://finance.naver.com/research/invest_read.naver*",
+        "https://finance.naver.com/research/industry_list.naver*",
+        "https://finance.naver.com/research/industry_read.naver*",
+        "https://finance.naver.com/research/economy_list.naver*",
+        "https://finance.naver.com/research/economy_read.naver*",
+        "https://finance.naver.com/research/debenture_list.naver*",
+        "https://finance.naver.com/research/debenture_read.naver*"
+      ],
+      "js": [
+        "utils.js",
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

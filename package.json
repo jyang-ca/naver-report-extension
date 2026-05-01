@@ -1,0 +1,10 @@
+{
+  "name": "naver-report-extension",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-extension.js",
+    "test": "node --test",
+    "lint": "node --check background.js && node --check content.js && node --check offscreen.js && node --check popup.js && node --check utils.js"
+  }
+}

@@ -1,0 +1,407 @@
+#naver-report-extension-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid #d7dde7;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fbfcfe 0%, #f3f6fb 100%);
+  font-size: 12px;
+}
+
+#naver-report-extension-toolbar button,
+.naver-report-extension__modal-actions button {
+  border: 1px solid #c2ccda;
+  border-radius: 6px;
+  background: #fff;
+  color: #1f2937;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 8px 10px;
+}
+
+#naver-report-extension-toolbar button:hover:not(:disabled),
+.naver-report-extension__modal-actions button:hover:not(:disabled) {
+  background: #eff4fb;
+}
+
+#naver-report-extension-toolbar button:disabled,
+.naver-report-extension__modal-actions button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+#naver-report-extension-toolbar .naver-report-extension__danger,
+.naver-report-extension__modal-actions .naver-report-extension__danger {
+  border-color: #e4b4b4;
+  color: #b42318;
+}
+
+.naver-report-extension__field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.naver-report-extension__field input[type='date'] {
+  border: 1px solid #c2ccda;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.naver-report-extension__progress {
+  color: #334155;
+  font-weight: 700;
+  margin-left: auto;
+}
+
+#naver-report-extension-status,
+#naver-report-extension-detail-status {
+  margin-bottom: 8px;
+  color: #475467;
+  font-size: 12px;
+}
+
+#naver-report-extension-status[data-error='true'],
+#naver-report-extension-detail-status[data-error='true'] {
+  color: #b42318;
+  font-weight: 600;
+}
+
+#naver-report-extension-detail-status {
+  margin-top: 8px;
+}
+
+.naver-report-extension__row-download-wrap {
+  display: inline-flex;
+  margin-right: 0;
+  vertical-align: middle;
+}
+
+.naver-report-extension__row-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #475467;
+  cursor: pointer;
+}
+
+.naver-report-extension__row-download:hover {
+  opacity: 0.85;
+}
+
+.naver-report-extension__row-download svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.naver-report-extension__row-download img {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+
+.naver-report-extension__native-pdf-link {
+  display: none !important;
+}
+
+body.naver-report-extension__modal-open {
+  overflow: hidden;
+}
+
+.naver-report-extension__modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+}
+
+.naver-report-extension__modal[hidden] {
+  display: none;
+}
+
+.naver-report-extension__modal-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.naver-report-extension__modal-dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(1080px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  margin: 16px auto;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.22);
+}
+
+.naver-report-extension__modal-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.naver-report-extension__modal-header h3 {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+}
+
+.naver-report-extension__modal-date {
+  margin: 6px 0 0;
+  color: #475467;
+  font-size: 12px;
+}
+
+.naver-report-extension__modal-close {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  background: #fff;
+  color: #475467;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.naver-report-extension__modal-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.naver-report-extension__modal-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 5px 10px;
+  min-width: 0;
+}
+
+.naver-report-extension__modal-progress,
+.naver-report-extension__modal-summary strong {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.naver-report-extension__modal-summary > span {
+  color: #475467;
+  font-size: 12px;
+}
+
+.naver-report-extension__modal-summary #naver-report-extension-modal-progress {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.naver-report-extension__modal-summary #naver-report-extension-modal-summary {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.naver-report-extension__modal-progress-track {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dbeafe;
+}
+
+.naver-report-extension__modal-progress-bar {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+  transition: width 180ms ease;
+}
+
+.naver-report-extension__modal-progress-percent {
+  grid-column: 3;
+  grid-row: 1;
+  text-align: right;
+}
+
+.naver-report-extension__modal-current-file {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  overflow: hidden;
+  color: #344054;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.naver-report-extension__modal-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.naver-report-extension__modal-actions #naver-report-extension-modal-download {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+
+.naver-report-extension__modal-actions #naver-report-extension-modal-download:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.naver-report-extension__modal-body {
+  min-height: 160px;
+  overflow: auto;
+}
+
+.naver-report-extension__empty {
+  color: #667085;
+  font-size: 13px;
+  padding: 18px;
+}
+
+.naver-report-extension__table-wrap {
+  overflow: auto;
+}
+
+.naver-report-extension__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  table-layout: fixed;
+}
+
+.naver-report-extension__table th,
+.naver-report-extension__table td {
+  border-bottom: 1px solid #e4e7ec;
+  overflow: hidden;
+  padding: 7px 10px;
+  text-align: left;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.naver-report-extension__table th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  z-index: 1;
+}
+
+.naver-report-extension__table code {
+  color: #344054;
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.naver-report-extension__row--failed,
+.naver-report-extension__row--skipped {
+  background: #fff7f7;
+}
+
+.naver-report-extension__status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.naver-report-extension__status-pill--pending {
+  background: #f2f4f7;
+  color: #344054;
+}
+
+.naver-report-extension__status-pill--downloading {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.naver-report-extension__status-pill--completed {
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.naver-report-extension__status-pill--failed,
+.naver-report-extension__status-pill--failed {
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.naver-report-extension__status-pill--skipped {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.naver-report-extension__error {
+  color: #b42318;
+  margin-top: 4px;
+  white-space: pre-wrap;
+}
+
+.naver-report-extension__cell-status {
+  background: #fff;
+}
+
+.naver-report-extension__cell-stock {
+  background: #fff;
+}
+
+.naver-report-extension__cell-title {
+  max-width: 360px;
+}
+
+.naver-report-extension__cell-filename {
+  max-width: 380px;
+}
+
+.naver-report-extension__sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+
+th.naver-report-extension__sticky-col {
+  z-index: 3;
+}
+
+.naver-report-extension__sticky-stock {
+  position: sticky;
+  z-index: 2;
+}
+
+th.naver-report-extension__sticky-stock {
+  z-index: 3;
+}
