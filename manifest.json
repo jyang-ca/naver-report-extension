@@ -3,7 +3,7 @@
   "name": "네이버 증권 리포트",
   "short_name": "네이버 리포트",
   "description": "네이버 증권 리서치 PDF를 개별 다운로드하고, 날짜별 리포트를 카테고리 ZIP으로 미리보기 후 저장합니다.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "permissions": [
     "downloads",
     "offscreen",
