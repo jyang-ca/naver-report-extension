@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
@@ -10,38 +10,219 @@
     <main class="popup">
       <h1>네이버 증권 리포트</h1>
       <p class="popup__intro">
-        네이버 증권 리서치에 올라온 PDF 리포트를 선택한 날짜 기준으로 자동 다운로드합니다.
-        날짜와 섹션별 폴더로 정리해 저장합니다.
+        네이버 증권 리서치 PDF 리포트를 날짜 기준 또는 종목/산업 기준으로 찾고
+        저장할 수 있습니다. 다운로드 파일은 날짜와 섹션별 폴더로 정리됩니다.
       </p>
 
-      <section class="popup__date-section" aria-labelledby="download-date-title">
-        <div id="download-date-title" class="popup__section-label">다운로드 날짜</div>
-        <div class="popup__quick-dates" role="group" aria-label="빠른 날짜 선택">
-          <button type="button" data-date-preset="today">오늘</button>
-          <button type="button" data-date-preset="yesterday">어제</button>
-          <button type="button" data-date-preset="business-day">최근 영업일</button>
-        </div>
-        <label class="popup__date-picker">
-          <span class="popup__sr-only">다운로드 날짜 선택</span>
-          <input id="download-date" type="date" />
-        </label>
-      </section>
-
-      <div class="popup__action-row">
-        <button id="download-today" type="button" class="popup__primary-action">
-          <span id="download-today-label" class="popup__primary-date"></span>
-          <span id="download-today-action-label" class="popup__primary-subtitle">
-            리포트 모두 다운로드
-          </span>
+      <div
+        class="popup__mode-tabs"
+        role="tablist"
+        aria-label="다운로드 기준 선택"
+      >
+        <button
+          id="download-mode-date"
+          class="popup__mode-tab is-active"
+          type="button"
+          role="tab"
+          aria-selected="true"
+          aria-controls="date-mode-panel"
+          tabindex="0"
+        >
+          날짜 기준
         </button>
-        <button id="stop-daily-download" type="button" class="popup__stop-action" hidden>
-          중단
+        <button
+          id="download-mode-entity"
+          class="popup__mode-tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          aria-controls="entity-mode-panel"
+          tabindex="-1"
+        >
+          종목 / 산업 기준
         </button>
       </div>
 
+      <section
+        id="date-mode-panel"
+        class="popup__mode-panel"
+        role="tabpanel"
+        aria-labelledby="download-mode-date"
+      >
+        <section
+          class="popup__date-section"
+          aria-labelledby="download-date-title"
+        >
+          <div id="download-date-title" class="popup__section-label">
+            다운로드 날짜
+          </div>
+          <div
+            class="popup__quick-dates"
+            role="group"
+            aria-label="빠른 날짜 선택"
+          >
+            <button type="button" data-date-preset="today">오늘</button>
+            <button type="button" data-date-preset="yesterday">어제</button>
+            <button type="button" data-date-preset="business-day">
+              최근 영업일
+            </button>
+          </div>
+          <label class="popup__date-picker">
+            <span class="popup__sr-only">다운로드 날짜 선택</span>
+            <input id="download-date" type="date" />
+          </label>
+        </section>
+
+        <div class="popup__action-row">
+          <button
+            id="download-today"
+            type="button"
+            class="popup__primary-action"
+          >
+            <span id="download-today-label" class="popup__primary-date"></span>
+            <span
+              id="download-today-action-label"
+              class="popup__primary-subtitle"
+            >
+              리포트 모두 다운로드
+            </span>
+          </button>
+          <button
+            id="stop-daily-download"
+            type="button"
+            class="popup__stop-action"
+            hidden
+          >
+            중단
+          </button>
+        </div>
+      </section>
+
+      <section
+        id="entity-mode-panel"
+        class="popup__mode-panel popup__mode-panel--entity"
+        role="tabpanel"
+        aria-labelledby="download-mode-entity"
+        hidden
+      >
+        <section
+          class="popup__entity-card"
+          aria-labelledby="entity-search-title"
+        >
+          <div class="popup__section-header">
+            <div id="entity-search-title" class="popup__section-label">
+              종목 / 산업 검색
+            </div>
+            <div class="popup__hover-help">
+              <button
+                id="industry-category-trigger"
+                class="popup__hover-help-trigger"
+                type="button"
+                aria-expanded="false"
+                aria-controls="industry-category-tooltip"
+              >
+                전체 산업 분류
+              </button>
+              <div
+                id="industry-category-tooltip"
+                class="popup__hover-help-panel"
+                role="tooltip"
+                hidden
+              >
+                불러오는 중입니다.
+              </div>
+            </div>
+          </div>
+          <label class="popup__field popup__field--compact">
+            <span class="popup__sr-only"
+              >종목명, 종목코드 또는 산업명 검색</span
+            >
+            <input
+              id="entity-search-input"
+              class="popup__entity-search-input"
+              type="search"
+              placeholder="종목명, 종목코드, 산업명으로 검색"
+              autocomplete="off"
+            />
+          </label>
+          <p id="entity-search-hint" class="popup__entity-hint">
+            종목명, 종목코드, 산업 키워드로 대상을 찾고 여러 항목을 함께 선택할
+            수 있습니다.
+          </p>
+          <ul
+            id="entity-search-results"
+            class="popup__entity-results"
+            aria-live="polite"
+          ></ul>
+        </section>
+
+        <section
+          class="popup__entity-card"
+          aria-labelledby="entity-selection-title"
+        >
+          <div class="popup__section-header">
+            <div id="entity-selection-title" class="popup__section-label">
+              선택한 항목
+            </div>
+            <span id="entity-selection-summary" class="popup__entity-summary"
+              >0개 선택됨</span
+            >
+          </div>
+          <p id="entity-selected-empty" class="popup__entity-empty">
+            아직 선택한 종목 또는 산업이 없습니다.
+          </p>
+          <ul
+            id="entity-selected-list"
+            class="popup__selection-list"
+            aria-live="polite"
+          ></ul>
+        </section>
+
+        <section
+          class="popup__entity-card"
+          aria-labelledby="entity-date-range-title"
+        >
+          <div id="entity-date-range-title" class="popup__section-label">
+            조회 기간
+          </div>
+          <div class="popup__entity-date-grid">
+            <label class="popup__field popup__field--compact">
+              <span>시작일</span>
+              <input id="entity-start-date" type="date" />
+            </label>
+            <label class="popup__field popup__field--compact">
+              <span>종료일</span>
+              <input id="entity-end-date" type="date" />
+            </label>
+          </div>
+        </section>
+
+        <div class="popup__action-row popup__action-row--entity">
+          <button
+            id="find-entity-reports"
+            type="button"
+            class="popup__primary-action"
+          >
+            <span class="popup__primary-date">선택 항목 기준 검색</span>
+            <span class="popup__primary-subtitle">리포트 찾기</span>
+          </button>
+          <button
+            id="stop-entity-download"
+            type="button"
+            class="popup__stop-action"
+            hidden
+          >
+            중단
+          </button>
+        </div>
+      </section>
+
       <section id="status-panel" class="popup__status-panel" aria-live="polite">
         <strong id="status-title">대기 중</strong>
-        <span id="status-detail">버튼을 누르면 선택한 날짜에 올라온 PDF 리포트를 하나의 ZIP 파일로 저장합니다.</span>
+        <span id="status-detail">
+          버튼을 누르면 선택한 날짜에 올라온 PDF 리포트를 하나의 ZIP 파일로
+          저장합니다.
+        </span>
         <div id="status-progress" class="popup__progress" hidden>
           <div class="popup__progress-header">
             <span id="status-progress-count">0 / 0개 완료</span>
@@ -88,7 +269,11 @@
           <span>파일명 템플릿</span>
           <input id="filename-template" type="text" />
           <small>사용 가능한 항목: 날짜, 종목명, 증권사, 리포트 제목</small>
-          <button id="reset-filename-template" type="button" class="popup__secondary-action">
+          <button
+            id="reset-filename-template"
+            type="button"
+            class="popup__secondary-action"
+          >
             기본값으로 복원
           </button>
         </label>
@@ -96,13 +281,19 @@
         <label class="popup__field">
           <span>리포트 목록 탐색 페이지 수</span>
           <input id="bulk-max-pages" type="number" min="1" max="100" />
-          <small>네이버 리서치 목록에서 최대 몇 페이지까지 확인할지 설정합니다.</small>
+          <small
+            >네이버 리서치 목록에서 최대 몇 페이지까지 확인할지
+            설정합니다.</small
+          >
         </label>
 
         <label class="popup__field">
           <span>동시 다운로드 수</span>
           <input id="bulk-concurrency" type="number" min="1" max="5" />
-          <small>한 번에 몇 개의 PDF를 받을지 설정합니다. 기본값을 권장합니다.</small>
+          <small
+            >한 번에 몇 개의 PDF를 받을지 설정합니다. 기본값을
+            권장합니다.</small
+          >
         </label>
       </details>
 
@@ -117,7 +308,9 @@
           title="GitHub 저장소 열기"
         >
           <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-            <path d="M8 0.2C3.7 0.2 0.2 3.7 0.2 8c0 3.4 2.2 6.3 5.3 7.4 0.4 0.1 0.5-0.2 0.5-0.4v-1.4c-2.2 0.5-2.6-1-2.6-1-0.4-0.9-0.9-1.1-0.9-1.1-0.7-0.5 0.1-0.5 0.1-0.5 0.8 0.1 1.2 0.8 1.2 0.8 0.7 1.2 1.9 0.9 2.3 0.7 0.1-0.5 0.3-0.9 0.5-1.1-1.7-0.2-3.6-0.9-3.6-3.9 0-0.9 0.3-1.6 0.8-2.1-0.1-0.2-0.3-1 0.1-2.1 0 0 0.7-0.2 2.2 0.8 0.6-0.2 1.3-0.3 2-0.3s1.4 0.1 2 0.3c1.5-1 2.2-0.8 2.2-0.8 0.4 1.1 0.2 1.9 0.1 2.1 0.5 0.6 0.8 1.3 0.8 2.1 0 3-1.8 3.7-3.6 3.9 0.3 0.3 0.5 0.7 0.5 1.5V15c0 0.2 0.1 0.5 0.5 0.4 3.1-1 5.3-4 5.3-7.4 0-4.3-3.5-7.8-7.8-7.8Z"></path>
+            <path
+              d="M8 0.2C3.7 0.2 0.2 3.7 0.2 8c0 3.4 2.2 6.3 5.3 7.4 0.4 0.1 0.5-0.2 0.5-0.4v-1.4c-2.2 0.5-2.6-1-2.6-1-0.4-0.9-0.9-1.1-0.9-1.1-0.7-0.5 0.1-0.5 0.1-0.5 0.8 0.1 1.2 0.8 1.2 0.8 0.7 1.2 1.9 0.9 2.3 0.7 0.1-0.5 0.3-0.9 0.5-1.1-1.7-0.2-3.6-0.9-3.6-3.9 0-0.9 0.3-1.6 0.8-2.1-0.1-0.2-0.3-1 0.1-2.1 0 0 0.7-0.2 2.2 0.8 0.6-0.2 1.3-0.3 2-0.3s1.4 0.1 2 0.3c1.5-1 2.2-0.8 2.2-0.8 0.4 1.1 0.2 1.9 0.1 2.1 0.5 0.6 0.8 1.3 0.8 2.1 0 3-1.8 3.7-3.6 3.9 0.3 0.3 0.5 0.7 0.5 1.5V15c0 0.2 0.1 0.5 0.5 0.4 3.1-1 5.3-4 5.3-7.4 0-4.3-3.5-7.8-7.8-7.8Z"
+            ></path>
           </svg>
         </a>
       </footer>

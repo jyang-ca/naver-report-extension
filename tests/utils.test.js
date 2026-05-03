@@ -2,22 +2,29 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  SETTINGS_SCHEMA_VERSION,
   normalizeDate,
   normalizeSettings,
+  migrateStoredSettings,
   sanitizeFilename,
   isKrxTradingDate,
   getRecentKrxTradingDate,
   buildFilename,
   buildDailyZipFilename,
+  buildEntityZipFilename,
   buildSectionZipFilename,
   buildReportZipEntryPath,
+  buildEntityZipEntryPath,
   createZipArchive,
   getResearchPageConfig,
   getResearchSectionConfig,
+  parseCompanySearchOptionsDocument,
+  parseIndustrySearchOptionsDocument,
   parseReportRow,
   parseReportRowsFromResearchHomeDocument,
   parseReportDetailDocument,
-  dedupeReports
+  dedupeReports,
+  searchResearchEntities
 } = require('../utils.js');
 
 test('normalizeDate converts YY.MM.DD into ISO format', () => {
@@ -85,6 +92,62 @@ test('normalizeSettings keeps a relative download path prefix', () => {
   assert.equal(settings.bulkDelayMs, 500);
 });
 
+test('normalizeSettings applies the default folder and concurrency options', () => {
+  const settings = normalizeSettings();
+
+  assert.equal(settings.createStockFolders, false);
+  assert.equal(settings.bulkMaxPages, 30);
+  assert.equal(settings.bulkConcurrency, 5);
+});
+
+test('normalizeSettings upgrades legacy default bulk options to the current defaults', () => {
+  const settings = normalizeSettings({
+    createStockFolders: true,
+    bulkMaxPages: 10,
+    bulkConcurrency: 1
+  });
+
+  assert.equal(settings.createStockFolders, false);
+  assert.equal(settings.bulkMaxPages, 30);
+  assert.equal(settings.bulkConcurrency, 5);
+});
+
+test('migrateStoredSettings upgrades older schema settings to the current defaults', () => {
+  const settings = migrateStoredSettings({
+    schemaVersion: 1,
+    downloadPathPrefix: 'custom-folder/reports',
+    filenameTemplate: '{date}_{stockName}.pdf',
+    useNativePathPicker: true,
+    createStockFolders: true,
+    bulkMaxPages: 34,
+    bulkConcurrency: 4,
+    bulkRetryMax: 2
+  });
+
+  assert.equal(settings.schemaVersion, SETTINGS_SCHEMA_VERSION);
+  assert.equal(settings.downloadPathPrefix, 'custom-folder/reports');
+  assert.equal(settings.filenameTemplate, '{date}_{stockName}.pdf');
+  assert.equal(settings.useNativePathPicker, true);
+  assert.equal(settings.createStockFolders, false);
+  assert.equal(settings.bulkMaxPages, 30);
+  assert.equal(settings.bulkConcurrency, 5);
+  assert.equal(settings.bulkRetryMax, 2);
+});
+
+test('migrateStoredSettings preserves current-schema custom values', () => {
+  const settings = migrateStoredSettings({
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
+    createStockFolders: true,
+    bulkMaxPages: 34,
+    bulkConcurrency: 4
+  });
+
+  assert.equal(settings.schemaVersion, SETTINGS_SCHEMA_VERSION);
+  assert.equal(settings.createStockFolders, true);
+  assert.equal(settings.bulkMaxPages, 34);
+  assert.equal(settings.bulkConcurrency, 4);
+});
+
 test('buildDailyZipFilename stores the date zip under the configured download path', () => {
   const filename = buildDailyZipFilename(
     {
@@ -107,6 +170,18 @@ test('buildSectionZipFilename stores section zips under the configured download 
   assert.equal(filename, 'naver-reports/산업분석.zip');
 });
 
+test('buildEntityZipFilename stores entity search zips under the configured download path', () => {
+  const filename = buildEntityZipFilename(
+    {
+      downloadPathPrefix: 'naver-reports'
+    },
+    '2026-04-01',
+    '2026-04-30'
+  );
+
+  assert.equal(filename, 'naver-reports/기업산업별_2026-04-01_2026-04-30.zip');
+});
+
 test('buildReportZipEntryPath removes the Downloads folder prefix for ZIP contents', () => {
   const filename = buildReportZipEntryPath(
     {
@@ -122,6 +197,49 @@ test('buildReportZipEntryPath removes the Downloads folder prefix for ZIP conten
   );
 
   assert.equal(filename, '삼성전자/2026-04-30_삼성전자_하나증권_반도체 업황 점검.pdf');
+});
+
+test('buildEntityZipEntryPath groups company reports under company folders with stock codes', () => {
+  const filename = buildEntityZipEntryPath(
+    {
+      date: '2026-04-30',
+      stockName: '삼성전자',
+      stockCode: '005930',
+      sectionName: '종목분석',
+      reportType: 'company',
+      broker: '하나증권',
+      reportTitle: '반도체 업황 점검'
+    },
+    {
+      filenameTemplate: '{date}_{stockName}_{broker}_{reportTitle}.pdf'
+    }
+  );
+
+  assert.equal(
+    filename,
+    '종목분석/삼성전자_005930/2026-04-30_삼성전자_하나증권_반도체 업황 점검.pdf'
+  );
+});
+
+test('buildEntityZipEntryPath groups industry reports under industry folders', () => {
+  const filename = buildEntityZipEntryPath(
+    {
+      date: '2026-04-30',
+      stockName: '은행',
+      sectionName: '산업분석',
+      reportType: 'industry',
+      broker: '하나증권',
+      reportTitle: '은행 업황 점검'
+    },
+    {
+      filenameTemplate: '{date}_{stockName}_{broker}_{reportTitle}.pdf'
+    }
+  );
+
+  assert.equal(
+    filename,
+    '산업분석/은행/2026-04-30_은행_하나증권_은행 업황 점검.pdf'
+  );
 });
 
 test('createZipArchive creates a UTF-8 stored zip with sanitized entry paths', () => {
@@ -153,6 +271,108 @@ test('getResearchPageConfig identifies the research home page', () => {
 
   assert.equal(config.kind, 'research_home');
   assert.equal(config.pageType, 'home');
+});
+
+test('parseCompanySearchOptionsDocument extracts company names and stock codes', () => {
+  const doc = {
+    querySelectorAll(selector) {
+      if (selector !== 'select[name="user_category"] option[value]') {
+        return [];
+      }
+
+      return [
+        { value: '------------------------------', textContent: '------------------------------' },
+        { value: '005930,삼성전자', textContent: '005930 삼성전자' },
+        { value: '000660,SK하이닉스', textContent: '000660 SK하이닉스' }
+      ];
+    }
+  };
+
+  assert.deepEqual(parseCompanySearchOptionsDocument(doc), [
+    {
+      key: 'company:005930',
+      type: 'company',
+      name: '삼성전자',
+      code: '005930',
+      displayName: '삼성전자 · 005930'
+    },
+    {
+      key: 'company:000660',
+      type: 'company',
+      name: 'SK하이닉스',
+      code: '000660',
+      displayName: 'SK하이닉스 · 000660'
+    }
+  ]);
+});
+
+test('parseIndustrySearchOptionsDocument extracts industry categories', () => {
+  const doc = {
+    querySelectorAll(selector) {
+      if (selector !== 'select[name="upjong"] option[value]') {
+        return [];
+      }
+
+      return [
+        { value: '', textContent: '선택' },
+        { value: '바이오', textContent: '바이오' },
+        { value: '은행', textContent: '은행' }
+      ];
+    }
+  };
+
+  assert.deepEqual(parseIndustrySearchOptionsDocument(doc), [
+    {
+      key: 'industry:바이오',
+      type: 'industry',
+      name: '바이오',
+      code: '',
+      displayName: '바이오'
+    },
+    {
+      key: 'industry:은행',
+      type: 'industry',
+      name: '은행',
+      code: '',
+      displayName: '은행'
+    }
+  ]);
+});
+
+test('searchResearchEntities matches companies by name and stock code while mixing industries', () => {
+  const entities = [
+    {
+      key: 'company:005930',
+      type: 'company',
+      name: '삼성전자',
+      code: '005930',
+      displayName: '삼성전자 · 005930'
+    },
+    {
+      key: 'company:000660',
+      type: 'company',
+      name: 'SK하이닉스',
+      code: '000660',
+      displayName: 'SK하이닉스 · 000660'
+    },
+    {
+      key: 'industry:에너지',
+      type: 'industry',
+      name: '에너지',
+      code: '',
+      displayName: '에너지'
+    }
+  ];
+
+  assert.deepEqual(searchResearchEntities(entities, '005930').map((item) => item.key), [
+    'company:005930'
+  ]);
+  assert.deepEqual(searchResearchEntities(entities, '에너지').map((item) => item.key), [
+    'industry:에너지'
+  ]);
+  assert.deepEqual(searchResearchEntities(entities, '삼성').map((item) => item.key), [
+    'company:005930'
+  ]);
 });
 
 test('parseReportRow extracts normalized report metadata from a table row', () => {

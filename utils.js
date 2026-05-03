@@ -3,6 +3,7 @@
 
   const ROOT_FOLDER = 'naver-reports';
   const SETTINGS_STORAGE_KEY = 'naverReportSettings';
+  const SETTINGS_SCHEMA_VERSION = 2;
   const RESEARCH_PAGE_CONFIGS = [
     {
       kind: 'company',
@@ -64,11 +65,17 @@
     downloadPathPrefix: ROOT_FOLDER,
     filenameTemplate: '{date}_{stockName}_{broker}_{reportTitle}.pdf',
     useNativePathPicker: false,
-    createStockFolders: true,
-    bulkMaxPages: 10,
-    bulkConcurrency: 1,
+    createStockFolders: false,
+    bulkMaxPages: 30,
+    bulkConcurrency: 5,
     bulkDelayMs: 500,
     bulkRetryMax: 1
+  };
+
+  const LEGACY_DEFAULT_SETTINGS = {
+    createStockFolders: true,
+    bulkMaxPages: 10,
+    bulkConcurrency: 1
   };
 
   const KRX_FIXED_MARKET_HOLIDAY_MONTH_DAYS = new Set([
@@ -105,6 +112,7 @@
 
   function normalizeSettings(input) {
     const source = input || {};
+    const usesLegacyDefaults = isLegacyDefaultSettings(source);
     return {
       downloadPathPrefix: normalizePathPrefix(
         typeof source.downloadPathPrefix === 'string'
@@ -116,10 +124,18 @@
           ? source.filenameTemplate.trim()
           : DEFAULT_SETTINGS.filenameTemplate,
       useNativePathPicker: Boolean(source.useNativePathPicker),
-      createStockFolders: source.createStockFolders !== false,
-      bulkMaxPages: clampInteger(source.bulkMaxPages, 1, 100, DEFAULT_SETTINGS.bulkMaxPages),
+      createStockFolders:
+        usesLegacyDefaults
+          ? DEFAULT_SETTINGS.createStockFolders
+          :
+        typeof source.createStockFolders === 'boolean'
+          ? source.createStockFolders
+          : DEFAULT_SETTINGS.createStockFolders,
+      bulkMaxPages: usesLegacyDefaults
+        ? DEFAULT_SETTINGS.bulkMaxPages
+        : clampInteger(source.bulkMaxPages, 1, 100, DEFAULT_SETTINGS.bulkMaxPages),
       bulkConcurrency: clampInteger(
-        source.bulkConcurrency,
+        usesLegacyDefaults ? DEFAULT_SETTINGS.bulkConcurrency : source.bulkConcurrency,
         1,
         5,
         DEFAULT_SETTINGS.bulkConcurrency
@@ -129,6 +145,15 @@
     };
   }
 
+  function isLegacyDefaultSettings(source) {
+    return Boolean(
+      source &&
+      source.createStockFolders === LEGACY_DEFAULT_SETTINGS.createStockFolders &&
+      Number.parseInt(source.bulkMaxPages, 10) === LEGACY_DEFAULT_SETTINGS.bulkMaxPages &&
+      Number.parseInt(source.bulkConcurrency, 10) === LEGACY_DEFAULT_SETTINGS.bulkConcurrency
+    );
+  }
+
   function clampInteger(value, min, max, fallback) {
     const parsed = Number.parseInt(value, 10);
     if (!Number.isFinite(parsed)) {
@@ -136,6 +161,36 @@
     }
 
     return Math.max(min, Math.min(max, parsed));
+  }
+
+  function migrateStoredSettings(input) {
+    const source = input && typeof input === 'object' ? input : {};
+    const currentVersion = readSettingsSchemaVersion(source);
+    let migrated = { ...source };
+
+    if (currentVersion < SETTINGS_SCHEMA_VERSION) {
+      migrated = {
+        ...migrated,
+        createStockFolders: DEFAULT_SETTINGS.createStockFolders,
+        bulkMaxPages: DEFAULT_SETTINGS.bulkMaxPages,
+        bulkConcurrency: DEFAULT_SETTINGS.bulkConcurrency
+      };
+    }
+
+    const normalized = normalizeSettings(migrated);
+    return {
+      ...normalized,
+      schemaVersion: SETTINGS_SCHEMA_VERSION
+    };
+  }
+
+  function readSettingsSchemaVersion(source) {
+    const version = Number.parseInt(source && source.schemaVersion, 10);
+    if (!Number.isFinite(version)) {
+      return 0;
+    }
+
+    return Math.max(0, version);
   }
 
   function normalizeDate(value) {
@@ -318,6 +373,16 @@
     return [config.downloadPathPrefix || ROOT_FOLDER, `${date}.zip`].join('/');
   }
 
+  function buildEntityZipFilename(settings, fromDate, toDate) {
+    const config = normalizeSettings(settings);
+    const startDate = normalizeDate(fromDate);
+    const endDate = normalizeDate(toDate);
+    return [
+      config.downloadPathPrefix || ROOT_FOLDER,
+      `기업산업별_${startDate}_${endDate}.zip`
+    ].join('/');
+  }
+
   function buildSectionZipFilename(settings, sectionName) {
     const config = normalizeSettings(settings);
     const zipName = sanitizeFilename(sectionName || '리포트');
@@ -332,6 +397,16 @@
     });
     const prefix = `${zipRoot}/`;
     return filename.startsWith(prefix) ? filename.slice(prefix.length) : filename;
+  }
+
+  function buildEntityZipEntryPath(report, settings) {
+    const basename = getPathBasename(buildReportZipEntryPath(report, {
+      ...(settings || {}),
+      createStockFolders: false
+    }));
+    const sectionFolder = sanitizeFilename(resolveEntitySectionFolder(report));
+    const entityFolder = sanitizeFilename(resolveEntityZipFolderName(report));
+    return joinPathSegments(sectionFolder, entityFolder, basename);
   }
 
   function createZipArchive(entries) {
@@ -550,6 +625,109 @@
     return unique;
   }
 
+  function parseCompanySearchOptionsDocument(doc) {
+    if (!doc || typeof doc.querySelectorAll !== 'function') {
+      return [];
+    }
+
+    const options = Array.from(doc.querySelectorAll('select[name="user_category"] option[value]'));
+    const seen = new Set();
+    const entities = [];
+
+    for (const option of options) {
+      const rawValue = readOptionValue(option);
+      if (!rawValue || !rawValue.includes(',')) {
+        continue;
+      }
+
+      const delimiterIndex = rawValue.indexOf(',');
+      const code = sanitizeText(rawValue.slice(0, delimiterIndex));
+      const name = sanitizeText(rawValue.slice(delimiterIndex + 1));
+      if (!code || !name) {
+        continue;
+      }
+
+      const entity = createResearchEntity('company', name, code);
+      if (seen.has(entity.key)) {
+        continue;
+      }
+
+      seen.add(entity.key);
+      entities.push(entity);
+    }
+
+    return entities;
+  }
+
+  function parseIndustrySearchOptionsDocument(doc) {
+    if (!doc || typeof doc.querySelectorAll !== 'function') {
+      return [];
+    }
+
+    const options = Array.from(doc.querySelectorAll('select[name="upjong"] option[value]'));
+    const seen = new Set();
+    const entities = [];
+
+    for (const option of options) {
+      const name = sanitizeText(readOptionValue(option) || option.textContent);
+      if (!name || name === '선택') {
+        continue;
+      }
+
+      const entity = createResearchEntity('industry', name, '');
+      if (seen.has(entity.key)) {
+        continue;
+      }
+
+      seen.add(entity.key);
+      entities.push(entity);
+    }
+
+    return entities;
+  }
+
+  function searchResearchEntities(entities, query, options) {
+    const normalizedQuery = sanitizeText(query).toLowerCase();
+    if (!normalizedQuery) {
+      return [];
+    }
+
+    const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+    const sourceEntities = Array.isArray(entities) ? entities : [];
+    const limit = clampInteger(options && options.limit, 1, 50, 20);
+
+    return sourceEntities
+      .map((sourceEntity, index) => {
+        const entity = createResearchEntity(
+          sourceEntity && sourceEntity.type ? sourceEntity.type : 'company',
+          sourceEntity && sourceEntity.name ? sourceEntity.name : '',
+          sourceEntity && sourceEntity.code ? sourceEntity.code : ''
+        );
+        const name = entity.name.toLowerCase();
+        const code = entity.code.toLowerCase();
+        const displayName = entity.displayName.toLowerCase();
+
+        let score = 0;
+        for (const token of tokens) {
+          const tokenScore = scoreResearchEntityToken(name, code, displayName, token);
+          if (tokenScore < 0) {
+            return null;
+          }
+          score += tokenScore;
+        }
+
+        return {
+          ...entity,
+          score,
+          order: index
+        };
+      })
+      .filter(Boolean)
+      .sort(compareResearchEntityMatches)
+      .slice(0, limit)
+      .map(({ score: _score, order: _order, ...entity }) => entity);
+  }
+
   function normalizeZipEntryPath(value) {
     const segments = String(value || '')
       .replace(/\\/g, '/')
@@ -720,6 +898,125 @@
     return String(value || '').replace(/\s+/g, ' ').trim();
   }
 
+  function readOptionValue(option) {
+    if (!option) {
+      return '';
+    }
+
+    if (typeof option.value === 'string') {
+      return option.value;
+    }
+
+    if (typeof option.getAttribute === 'function') {
+      return option.getAttribute('value') || '';
+    }
+
+    return '';
+  }
+
+  function createResearchEntity(type, name, code) {
+    const normalizedType = type === 'industry' ? 'industry' : 'company';
+    const normalizedName = sanitizeText(name);
+    const normalizedCode = sanitizeText(code);
+    return {
+      key: `${normalizedType}:${normalizedType === 'industry' ? normalizedName : normalizedCode}`,
+      type: normalizedType,
+      name: normalizedName,
+      code: normalizedType === 'company' ? normalizedCode : '',
+      displayName: formatResearchEntityDisplayName(normalizedType, normalizedName, normalizedCode)
+    };
+  }
+
+  function formatResearchEntityDisplayName(type, name, code) {
+    if (type === 'company' && code) {
+      return `${name} · ${code}`;
+    }
+
+    return name;
+  }
+
+  function scoreResearchEntityToken(name, code, displayName, token) {
+    if (code) {
+      if (code === token) {
+        return 500;
+      }
+
+      if (code.startsWith(token)) {
+        return 430;
+      }
+
+      if (code.includes(token)) {
+        return 330;
+      }
+    }
+
+    if (name === token) {
+      return 420;
+    }
+
+    if (name.startsWith(token)) {
+      return 320;
+    }
+
+    if (name.includes(token)) {
+      return 240;
+    }
+
+    if (displayName.includes(token)) {
+      return 180;
+    }
+
+    return -1;
+  }
+
+  function compareResearchEntityMatches(left, right) {
+    if (right.score !== left.score) {
+      return right.score - left.score;
+    }
+
+    if (left.type !== right.type) {
+      return left.type === 'company' ? -1 : 1;
+    }
+
+    if (left.name.length !== right.name.length) {
+      return left.name.length - right.name.length;
+    }
+
+    if (left.name !== right.name) {
+      return left.name.localeCompare(right.name, 'ko');
+    }
+
+    return left.order - right.order;
+  }
+
+  function getPathBasename(path) {
+    const parts = String(path || '').split('/');
+    return parts[parts.length - 1] || 'untitled.pdf';
+  }
+
+  function joinPathSegments(...parts) {
+    return parts
+      .map((part) => sanitizeFilename(part))
+      .filter(Boolean)
+      .join('/');
+  }
+
+  function resolveEntitySectionFolder(report) {
+    return report && report.reportType === 'industry'
+      ? '산업분석'
+      : '종목분석';
+  }
+
+  function resolveEntityZipFolderName(report) {
+    if (report && report.reportType === 'industry') {
+      return resolveEntityName(report);
+    }
+
+    const stockName = resolveEntityName(report);
+    const stockCode = sanitizeText(report && report.stockCode ? report.stockCode : '');
+    return stockCode ? `${stockName}_${stockCode}` : stockName;
+  }
+
   function resolveEntityName(report) {
     return (
       report.stockName ||
@@ -881,8 +1178,10 @@
   const exported = {
     ROOT_FOLDER,
     SETTINGS_STORAGE_KEY,
+    SETTINGS_SCHEMA_VERSION,
     RESEARCH_PAGE_CONFIGS,
     DEFAULT_SETTINGS,
+    migrateStoredSettings,
     normalizeSettings,
     normalizeDate,
     isKrxTradingDate,
@@ -890,16 +1189,21 @@
     sanitizeFilename,
     buildFilename,
     buildDailyZipFilename,
+    buildEntityZipFilename,
     buildSectionZipFilename,
     buildReportZipEntryPath,
+    buildEntityZipEntryPath,
     createZipArchive,
     getResearchPageConfig,
     getResearchSectionConfig,
+    parseCompanySearchOptionsDocument,
+    parseIndustrySearchOptionsDocument,
     parseReportRow,
     parseReportRowsFromDocument,
     parseReportRowsFromResearchHomeDocument,
     parseReportDetailDocument,
-    dedupeReports
+    dedupeReports,
+    searchResearchEntities
   };
 
   root.NaverReportUtils = exported;
