@@ -21,6 +21,7 @@
   const {
     SETTINGS_STORAGE_KEY,
     DEFAULT_SETTINGS,
+    migrateStoredSettings,
     normalizeSettings,
     normalizeDate,
     buildFilename,
@@ -113,7 +114,16 @@
 
   async function loadSettings() {
     const result = await chrome.storage.local.get([SETTINGS_STORAGE_KEY]);
-    return normalizeSettings(result && result[SETTINGS_STORAGE_KEY]);
+    const storedSettings = result && result[SETTINGS_STORAGE_KEY];
+    const migratedStoredSettings = migrateStoredSettings(storedSettings);
+
+    if (!storedSettings || JSON.stringify(storedSettings) !== JSON.stringify(migratedStoredSettings)) {
+      await chrome.storage.local.set({
+        [SETTINGS_STORAGE_KEY]: migratedStoredSettings
+      });
+    }
+
+    return normalizeSettings(migratedStoredSettings);
   }
 
   function connectPort() {
@@ -141,7 +151,7 @@
         return;
       }
 
-      state.settings = normalizeSettings(changes[SETTINGS_STORAGE_KEY].newValue);
+      state.settings = normalizeSettings(migrateStoredSettings(changes[SETTINGS_STORAGE_KEY].newValue));
 
       if (state.pageType === 'list') {
         decorateVisibleRows();

@@ -6,6 +6,8 @@ importScripts('utils.js');
   const {
     SETTINGS_STORAGE_KEY,
     DEFAULT_SETTINGS,
+    RESEARCH_PAGE_CONFIGS,
+    migrateStoredSettings,
     normalizeSettings,
     buildFilename,
     buildDailyZipFilename
@@ -22,6 +24,7 @@ importScripts('utils.js');
     OFFSCREEN_STOP_DAILY_ZIP: 'NAVER_REPORT_OFFSCREEN_STOP_DAILY_ZIP',
     OFFSCREEN_DAILY_ZIP_PROGRESS: 'NAVER_REPORT_OFFSCREEN_DAILY_ZIP_PROGRESS',
     OFFSCREEN_DAILY_ZIP_READY: 'NAVER_REPORT_OFFSCREEN_DAILY_ZIP_READY',
+    OFFSCREEN_DAILY_ZIP_EMPTY: 'NAVER_REPORT_OFFSCREEN_DAILY_ZIP_EMPTY',
     OFFSCREEN_DAILY_ZIP_STOPPED: 'NAVER_REPORT_OFFSCREEN_DAILY_ZIP_STOPPED',
     OFFSCREEN_DAILY_ZIP_FAILED: 'NAVER_REPORT_OFFSCREEN_DAILY_ZIP_FAILED',
     OFFSCREEN_REVOKE_OBJECT_URL: 'NAVER_REPORT_OFFSCREEN_REVOKE_OBJECT_URL'
@@ -148,6 +151,12 @@ importScripts('utils.js');
       return true;
     }
 
+    if (message.type === MESSAGE_TYPES.OFFSCREEN_DAILY_ZIP_EMPTY) {
+      handleOffscreenDailyZipEmpty(message);
+      sendResponse({ ok: true });
+      return false;
+    }
+
     if (message.type === MESSAGE_TYPES.OFFSCREEN_DAILY_ZIP_STOPPED) {
       handleOffscreenDailyZipStopped(message);
       sendResponse({ ok: true });
@@ -252,12 +261,26 @@ importScripts('utils.js');
     const source = message.source || (typeof tabId === 'number' ? 'content' : 'popup');
     const settings = normalizeSettings(message.settings);
     const targetDate = message.targetDate || '';
+    const metadata = {
+      mode: message.mode === 'entity' ? 'entity' : 'date',
+      fromDate: message.fromDate || '',
+      toDate: message.toDate || '',
+      selectionSummary: message.selectionSummary || '',
+      selectedCount: Number.isFinite(message.selectedCount) ? message.selectedCount : 0,
+      selectedCompanyCount: Number.isFinite(message.selectedCompanyCount)
+        ? message.selectedCompanyCount
+        : 0,
+      selectedIndustryCount: Number.isFinite(message.selectedIndustryCount)
+        ? message.selectedIndustryCount
+        : 0
+    };
+    const collectSpec = normalizeCollectSpec(message.collectSpec, metadata, settings);
     const reports = Array.isArray(message.items) ? message.items : [];
-    if (!reports.length) {
+    if (!reports.length && !collectSpec) {
       throw new Error('No reports to download.');
     }
 
-    const items = reports.map((report, index) => ({
+    const items = reports.length ? reports.map((report, index) => ({
       id: `daily-report-${index}`,
       date: report && report.date ? report.date : '',
       sectionName: report && report.sectionName ? report.sectionName : '',
@@ -271,7 +294,7 @@ importScripts('utils.js');
       error: report && report.pdfUrl ? '' : 'Missing PDF URL',
       attemptCount: 0,
       retriesRemaining: settings.bulkRetryMax
-    }));
+    })) : [];
 
     const jobId = `daily-zip-${Date.now()}`;
     const zipFilename = message.zipFilename
@@ -283,6 +306,19 @@ importScripts('utils.js');
       tabId,
       settings,
       targetDate,
+      mode: metadata.mode,
+      fromDate: metadata.fromDate,
+      toDate: metadata.toDate,
+      selectionSummary: metadata.selectionSummary,
+      selectedCount: metadata.selectedCount,
+      selectedCompanyCount: metadata.selectedCompanyCount,
+      selectedIndustryCount: metadata.selectedIndustryCount,
+      collectSpec,
+      collectionTotalPageCount: estimateCollectionTotalPageCount(collectSpec, settings),
+      scannedPageCount: 0,
+      currentCollectionPage: 0,
+      currentSectionName: '',
+      collectedReportCount: items.length,
       zipFilename,
       objectUrl: '',
       zipDownloadId: null,
@@ -292,9 +328,21 @@ importScripts('utils.js');
         source,
         tabId,
         targetDate,
+        mode: metadata.mode,
+        fromDate: metadata.fromDate,
+        toDate: metadata.toDate,
+        selectionSummary: metadata.selectionSummary,
+        selectedCount: metadata.selectedCount,
+        selectedCompanyCount: metadata.selectedCompanyCount,
+        selectedIndustryCount: metadata.selectedIndustryCount,
+        collectionTotalPageCount: estimateCollectionTotalPageCount(collectSpec, settings),
+        scannedPageCount: 0,
+        currentCollectionPage: 0,
+        currentSectionName: '',
+        collectedReportCount: items.length,
         zipFilename,
         jobStatus: 'queued',
-        phase: 'queued',
+        phase: collectSpec ? 'collecting' : 'queued',
         items,
         error: ''
       })
@@ -310,10 +358,18 @@ importScripts('utils.js');
         target: 'offscreen',
         type: MESSAGE_TYPES.OFFSCREEN_START_DAILY_ZIP,
         jobId: job.id,
+        mode: job.mode,
         targetDate,
+        fromDate: job.fromDate,
+        toDate: job.toDate,
+        selectionSummary: job.selectionSummary,
+        selectedCount: job.selectedCount,
+        selectedCompanyCount: job.selectedCompanyCount,
+        selectedIndustryCount: job.selectedIndustryCount,
         zipFilename: job.zipFilename,
         settings,
-        items
+        items,
+        collectSpec
       });
 
       if (!response || !response.ok) {
@@ -381,14 +437,14 @@ importScripts('utils.js');
       return;
     }
 
-    job.snapshot = {
+    job.snapshot = applyDailyZipMetadata({
       ...message.snapshot,
       jobId: job.id,
       source: job.source,
       tabId: job.tabId,
       targetDate: job.targetDate,
       zipFilename: job.zipFilename
-    };
+    }, job);
     emitDailyZipUpdate(job.snapshot);
   }
 
@@ -399,14 +455,14 @@ importScripts('utils.js');
     }
 
     if (message.snapshot) {
-      job.snapshot = {
+      job.snapshot = applyDailyZipMetadata({
         ...message.snapshot,
         jobId: job.id,
         source: job.source,
         tabId: job.tabId,
         targetDate: job.targetDate,
         zipFilename: job.zipFilename
-      };
+      }, job);
     }
 
     job.objectUrl = message.objectUrl || '';
@@ -480,7 +536,7 @@ importScripts('utils.js');
       return;
     }
 
-    job.snapshot = {
+    job.snapshot = applyDailyZipMetadata({
       ...(message.snapshot || job.snapshot),
       jobId: job.id,
       source: job.source,
@@ -490,7 +546,7 @@ importScripts('utils.js');
       jobStatus: 'failed',
       phase: 'failed',
       error: message.error || 'ZIP 작업에 실패했습니다.'
-    };
+    }, job);
     emitDailyZipUpdate(job.snapshot);
     activeDailyZipJob = null;
   }
@@ -501,7 +557,7 @@ importScripts('utils.js');
       return;
     }
 
-    job.snapshot = {
+    job.snapshot = applyDailyZipMetadata({
       ...(message.snapshot || job.snapshot),
       jobId: job.id,
       source: job.source,
@@ -511,7 +567,28 @@ importScripts('utils.js');
       jobStatus: 'stopped',
       phase: 'stopped',
       error: ''
-    };
+    }, job);
+    emitDailyZipUpdate(job.snapshot);
+    activeDailyZipJob = null;
+  }
+
+  function handleOffscreenDailyZipEmpty(message) {
+    const job = activeDailyZipJob;
+    if (!job || message.jobId !== job.id) {
+      return;
+    }
+
+    job.snapshot = applyDailyZipMetadata({
+      ...(message.snapshot || job.snapshot),
+      jobId: job.id,
+      source: job.source,
+      tabId: job.tabId,
+      targetDate: job.targetDate,
+      zipFilename: job.zipFilename,
+      jobStatus: 'completed',
+      phase: 'empty',
+      error: ''
+    }, job);
     emitDailyZipUpdate(job.snapshot);
     activeDailyZipJob = null;
   }
@@ -899,6 +976,15 @@ importScripts('utils.js');
       source: job.source || 'popup',
       tabId: typeof job.tabId === 'number' ? job.tabId : null,
       targetDate: job.targetDate,
+      mode: job.mode || 'date',
+      fromDate: job.fromDate || '',
+      toDate: job.toDate || '',
+      selectionSummary: job.selectionSummary || '',
+      selectedCount: typeof job.selectedCount === 'number' ? job.selectedCount : 0,
+      selectedCompanyCount:
+        typeof job.selectedCompanyCount === 'number' ? job.selectedCompanyCount : 0,
+      selectedIndustryCount:
+        typeof job.selectedIndustryCount === 'number' ? job.selectedIndustryCount : 0,
       zipFilename: job.zipFilename,
       jobStatus: job.jobStatus,
       phase: job.phase,
@@ -926,6 +1012,102 @@ importScripts('utils.js');
         retriesRemaining: item.retriesRemaining
       }))
     };
+  }
+
+  function applyDailyZipMetadata(snapshot, job) {
+    return {
+      ...(snapshot || {}),
+      mode: snapshot && snapshot.mode ? snapshot.mode : (job.mode || 'date'),
+      fromDate: snapshot && snapshot.fromDate ? snapshot.fromDate : (job.fromDate || ''),
+      toDate: snapshot && snapshot.toDate ? snapshot.toDate : (job.toDate || ''),
+      selectionSummary:
+        snapshot && snapshot.selectionSummary
+          ? snapshot.selectionSummary
+          : (job.selectionSummary || ''),
+      selectedCount:
+        snapshot && typeof snapshot.selectedCount === 'number'
+          ? snapshot.selectedCount
+          : (typeof job.selectedCount === 'number' ? job.selectedCount : 0),
+      selectedCompanyCount:
+        snapshot && typeof snapshot.selectedCompanyCount === 'number'
+          ? snapshot.selectedCompanyCount
+          : (typeof job.selectedCompanyCount === 'number' ? job.selectedCompanyCount : 0),
+      selectedIndustryCount:
+        snapshot && typeof snapshot.selectedIndustryCount === 'number'
+          ? snapshot.selectedIndustryCount
+          : (typeof job.selectedIndustryCount === 'number' ? job.selectedIndustryCount : 0),
+      collectionTotalPageCount:
+        snapshot && typeof snapshot.collectionTotalPageCount === 'number'
+          ? snapshot.collectionTotalPageCount
+          : (typeof job.collectionTotalPageCount === 'number' ? job.collectionTotalPageCount : 0),
+      scannedPageCount:
+        snapshot && typeof snapshot.scannedPageCount === 'number'
+          ? snapshot.scannedPageCount
+          : (typeof job.scannedPageCount === 'number' ? job.scannedPageCount : 0),
+      currentCollectionPage:
+        snapshot && typeof snapshot.currentCollectionPage === 'number'
+          ? snapshot.currentCollectionPage
+          : (typeof job.currentCollectionPage === 'number' ? job.currentCollectionPage : 0),
+      currentSectionName:
+        snapshot && snapshot.currentSectionName
+          ? snapshot.currentSectionName
+          : (job.currentSectionName || ''),
+      collectedReportCount:
+        snapshot && typeof snapshot.collectedReportCount === 'number'
+          ? snapshot.collectedReportCount
+          : (typeof job.collectedReportCount === 'number' ? job.collectedReportCount : 0)
+    };
+  }
+
+  function normalizeCollectSpec(messageCollectSpec, metadata, settings) {
+    if (!messageCollectSpec || typeof messageCollectSpec !== 'object') {
+      return null;
+    }
+
+    const mode = metadata.mode === 'entity' ? 'entity' : 'date';
+    const targetDate = messageCollectSpec.targetDate || metadata.toDate || '';
+    const fromDate = messageCollectSpec.fromDate || metadata.fromDate || '';
+    const toDate = messageCollectSpec.toDate || metadata.toDate || targetDate;
+    const selectedCompanyCodes = Array.isArray(messageCollectSpec.selectedCompanyCodes)
+      ? messageCollectSpec.selectedCompanyCodes.filter(Boolean).map(String)
+      : [];
+    const selectedIndustryNames = Array.isArray(messageCollectSpec.selectedIndustryNames)
+      ? messageCollectSpec.selectedIndustryNames.filter(Boolean).map(String)
+      : [];
+
+    if (mode === 'entity' && !selectedCompanyCodes.length && !selectedIndustryNames.length) {
+      return null;
+    }
+
+    return {
+      mode,
+      targetDate,
+      fromDate,
+      toDate,
+      selectedCompanyCodes,
+      selectedIndustryNames,
+      bulkMaxPages: settings.bulkMaxPages
+    };
+  }
+
+  function estimateCollectionTotalPageCount(collectSpec, settings) {
+    if (!collectSpec) {
+      return 0;
+    }
+
+    if (collectSpec.mode === 'entity') {
+      let sectionCount = 0;
+      if (collectSpec.selectedCompanyCodes && collectSpec.selectedCompanyCodes.length) {
+        sectionCount += 1;
+      }
+      if (collectSpec.selectedIndustryNames && collectSpec.selectedIndustryNames.length) {
+        sectionCount += 1;
+      }
+      return sectionCount * settings.bulkMaxPages;
+    }
+
+    const listCount = Array.isArray(RESEARCH_PAGE_CONFIGS) ? RESEARCH_PAGE_CONFIGS.length : 6;
+    return listCount * settings.bulkMaxPages;
   }
 
   function emitDailyZipUpdate(snapshot) {
@@ -1027,12 +1209,11 @@ importScripts('utils.js');
 
   async function ensureDefaultSettings() {
     const result = await chrome.storage.local.get([SETTINGS_STORAGE_KEY]);
-    if (result && result[SETTINGS_STORAGE_KEY]) {
-      return;
-    }
+    const storedSettings = result && result[SETTINGS_STORAGE_KEY];
+    const migratedStoredSettings = migrateStoredSettings(storedSettings);
 
     await chrome.storage.local.set({
-      [SETTINGS_STORAGE_KEY]: normalizeSettings(DEFAULT_SETTINGS)
+      [SETTINGS_STORAGE_KEY]: migratedStoredSettings
     });
   }
 
